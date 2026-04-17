@@ -84,21 +84,16 @@ async def fetch_notices() -> list[dict]:
     return results
 
 
-async def fetch_summary(url: str) -> str:
-    """본문 첫 200자 요약을 가져온다."""
+async def fetch_body(url: str) -> str:
+    """공지 본문 전체 텍스트를 가져온다."""
     try:
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
             page = await browser.new_page()
             await page.goto(url, wait_until="networkidle", timeout=30_000)
-
-            # 본문 영역 selector (로스트아크 공지 페이지)
             selectors = [
-                ".fr-view",
-                ".news-detail__content",
-                ".board-view__content",
-                "article",
-                ".content",
+                ".fr-view", ".news-detail__content",
+                ".board-view__content", "article", ".content",
             ]
             text = ""
             for sel in selectors:
@@ -106,12 +101,42 @@ async def fetch_summary(url: str) -> str:
                 if el:
                     text = (await el.inner_text()).strip()
                     break
-
             await browser.close()
-            return text[:200].replace("\n", " ") + ("..." if len(text) > 200 else "")
+            return text[:3000]
     except Exception as e:
-        log.warning(f"본문 요약 실패: {e}")
+        log.warning(f"본문 크롤링 실패: {e}")
+        return ""
+
+
+async def summarize_with_gemini(title: str, body: str) -> str:
+    """Gemini API로 bullet point 요약 (10줄 이내)"""
+    if not body:
         return "본문을 가져오지 못했습니다."
+
+    api_key = os.environ.get("GEMINI_API_KEY", "")
+    prompt = f"""다음은 로스트아크 업데이트 공지 내용입니다.
+제목: {title}
+
+본문:
+{body}
+
+위 내용을 bullet point(•)로 핵심 변경사항만 10줄 이내로 요약해주세요.
+- 불필요한 인사말, 안내 문구는 제외
+- 실제 업데이트 내용(신규 콘텐츠, 변경사항, 수정사항 등)만 포함
+- 각 항목은 간결하게 한 줄로 작성"""
+
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(
+                f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}",
+                headers={"content-type": "application/json"},
+                json={"contents": [{"parts": [{"text": prompt}]}]},
+            )
+            data = resp.json()
+            return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+    except Exception as e:
+        log.warning(f"Gemini 요약 실패: {e}")
+        return body[:300] + "..."
 
 
 # ── 디스코드 전송 ────────────────────────────────────
@@ -155,7 +180,8 @@ async def main():
     log.info(f"새 게시글: {len(new_posts)}건")
 
     for post in new_posts:
-        summary = await fetch_summary(post["url"])
+        body = await fetch_body(post["url"])
+        summary = await summarize_with_gemini(post["title"], body)
         await send_discord(post, summary)
         seen.add(post["id"])
         save_seen(seen)

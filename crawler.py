@@ -51,7 +51,8 @@ async def fetch_notices() -> list[dict]:
         page = await browser.new_page()
 
         log.info("페이지 로딩 중...")
-        await page.goto(TARGET_URL, wait_until="networkidle", timeout=30_000)
+        await page.goto(TARGET_URL, wait_until="domcontentloaded", timeout=60_000)
+        await page.wait_for_timeout(3000)  # JS 렌더링 대기
 
         # 공지 목록 행 선택
         rows = await page.query_selector_all("ul.list > li, .board-list li, tr.list-item")
@@ -90,7 +91,8 @@ async def fetch_body(url: str) -> str:
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
             page = await browser.new_page()
-            await page.goto(url, wait_until="networkidle", timeout=30_000)
+            await page.goto(url, wait_until="domcontentloaded", timeout=60_000)
+            await page.wait_for_timeout(3000)
             selectors = [
                 ".fr-view", ".news-detail__content",
                 ".board-view__content", "article", ".content",

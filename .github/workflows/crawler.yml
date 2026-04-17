@@ -1,0 +1,43 @@
+name: 로스트아크 업데이트 공지 크롤러
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"  # 10분마다 실행
+  workflow_dispatch:         # 수동 실행 버튼도 활성화
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 코드 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Python 설치
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 패키지 설치
+        run: |
+          pip install playwright apscheduler httpx
+          playwright install chromium
+          playwright install-deps chromium
+
+      - name: seen_posts.json 복원 (캐시)
+        uses: actions/cache@v4
+        with:
+          path: seen_posts.json
+          key: seen-posts-${{ github.run_id }}
+          restore-keys: seen-posts-
+
+      - name: 크롤러 실행
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: python crawler.py
+
+      - name: seen_posts.json 저장
+        uses: actions/cache@v4
+        with:
+          path: seen_posts.json
+          key: seen-posts-${{ github.run_id }}

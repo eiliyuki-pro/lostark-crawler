@@ -114,16 +114,17 @@ async def summarize_with_gemini(title: str, body: str) -> str:
         return "본문을 가져오지 못했습니다."
 
     api_key = os.environ.get("GEMINI_API_KEY", "")
-    prompt = f"""다음은 로스트아크 업데이트 공지 내용입니다.
+    prompt = f"""아래는 로스트아크 업데이트 공지입니다. 핵심 변경사항만 bullet point(•)로 추출하세요.
+
+규칙:
+- 최대 10개 항목
+- 각 항목은 15자 이내로 초간결하게
+- 인사말, 점검 시간, 안내 문구, #anchor 태그, [목차] 등 일체 제외
+- 형식 예시: • 신규 레이드: 카제로스 추가
+- 다른 말 없이 bullet point 목록만 출력
+
 제목: {title}
-
-본문:
-{body}
-
-위 내용을 bullet point(•)로 핵심 변경사항만 10줄 이내로 요약해주세요.
-- 불필요한 인사말, 안내 문구는 제외
-- 실제 업데이트 내용(신규 콘텐츠, 변경사항, 수정사항 등)만 포함
-- 각 항목은 간결하게 한 줄로 작성"""
+본문: {body}"""
 
     try:
         async with httpx.AsyncClient(timeout=30) as client:

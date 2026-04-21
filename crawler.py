@@ -110,12 +110,12 @@ async def fetch_body(url: str) -> str:
         return ""
 
 
-async def summarize_with_gemini(title: str, body: str) -> str:
-    """Gemini API로 bullet point 요약 (10줄 이내)"""
+async def summarize_with_groq(title: str, body: str) -> str:
+    """Groq API로 bullet point 요약 (10줄 이내)"""
     if not body:
         return "본문을 가져오지 못했습니다."
 
-    api_key = os.environ.get("GEMINI_API_KEY", "")
+    api_key = os.environ.get("GROQ_API_KEY", "")
     prompt = f"""아래는 로스트아크 업데이트 공지입니다. 핵심 변경사항만 bullet point(•)로 추출하세요.
 
 규칙:
@@ -131,14 +131,21 @@ async def summarize_with_gemini(title: str, body: str) -> str:
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.post(
-                f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}",
-                headers={"content-type": "application/json"},
-                json={"contents": [{"parts": [{"text": prompt}]}]},
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "llama-3.3-70b-versatile",
+                    "messages": [{"role": "user", "content": prompt}],
+                    "max_tokens": 1024,
+                },
             )
             data = resp.json()
-            return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+            return data["choices"][0]["message"]["content"].strip()
     except Exception as e:
-        log.warning(f"Gemini 요약 실패: {e}")
+        log.warning(f"Groq 요약 실패: {e}")
         return body[:300] + "..."
 
 
@@ -184,11 +191,11 @@ async def main():
 
     for post in new_posts:
         body = await fetch_body(post["url"])
-        summary = await summarize_with_gemini(post["title"], body)
+        summary = await summarize_with_groq(post["title"], body)
         await send_discord(post, summary)
         seen.add(post["id"])
         save_seen(seen)
-        await asyncio.sleep(1)
+        await asyncio.sleep(5)  # Gemini 무료 한도 초과 방지
 
     log.info("완료")
 
